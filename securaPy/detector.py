@@ -86,7 +86,7 @@ def detectar_port_scan(eventos, threshold=3):
                 severidade = "MEDIA"
 
             resultado[ip] = {
-                "portas": list(portas),
+                "portas": sorted(list(portas)),
                 "quantidade": quantidade,
                 "severidade": severidade
             }
@@ -97,66 +97,96 @@ def detectar_port_scan(eventos, threshold=3):
 def verificar_blacklist(eventos, blacklist):
     """
     Cruza os IPs dos logs com uma lista de IPs maliciosos conhecidos.
-    Usa intersecao de sets para encontrar matches de forma eficiente.
 
-    Retorna o set de IPs maliciosos encontrados nos logs.
+    Retorna tupla:
+        - set de IPs maliciosos encontrados nos logs
+        - dict {ip: contagem_de_eventos} para cada IP malicioso
     """
-    # Coleta todos os IPs unicos dos eventos
-    ips_nos_logs = {evento.get("ip") for evento in eventos if evento.get("ip")}
+    # Conta quantos eventos cada IP gerou
+    contagem_por_ip = defaultdict(int)
+    for evento in eventos:
+        ip = evento.get("ip")
+        if ip:
+            contagem_por_ip[ip] += 1
 
-    # Intersecao: IPs que estao nos logs E na blacklist
-    return ips_nos_logs & blacklist
+    blacklist_set = set(blacklist)
+
+    # IPs que estao nos logs E na blacklist
+    ips_maliciosos = {ip for ip in contagem_por_ip if ip in blacklist_set}
+
+    # Dict de contagem apenas para os IPs maliciosos encontrados
+    contagem_maliciosos = {ip: contagem_por_ip[ip] for ip in ips_maliciosos}
+
+    return ips_maliciosos, contagem_maliciosos
 
 
 def gerar_resumo_ameacas(brute, scan, blacklist):
     """
     Consolida os achados dos tres detectores em uma lista unificada.
-    IPs que aparecem em multiplas deteccoes recebem severidade mais alta.
+    IPs que aparecem em multiplas deteccoes recebem pontuacao mais alta.
 
-    Retorna lista de dicts ordenada por nivel de ameaca (mais critico primeiro).
+    Retorna lista de dicts ordenada por pontuacao decrescente.
+    Cada dict contem: ip, deteccoes, pontuacao, severidade.
+
+    Parametros:
+        brute     -- dict retornado por detectar_brute_force
+        scan      -- dict retornado por detectar_port_scan
+        blacklist -- tupla (set_ips, dict_contagem) retornada por verificar_blacklist,
+                     ou set/lista/frozenset de IPs maliciosos
     """
-    # Mapeamento de severidade para valor numerico (facilita comparacoes)
     MAPA_SEVERIDADE = {"CRITICA": 4, "ALTA": 3, "MEDIA": 2, "BAIXA": 1}
     MAPA_INVERSO = {v: k for k, v in MAPA_SEVERIDADE.items()}
 
+    # Normaliza blacklist: aceita tupla de verificar_blacklist ou set/lista direto
+    if isinstance(blacklist, tuple):
+        blacklist_ips = blacklist[0]  # (set_ips, contagem) -> pega o set
+    else:
+        blacklist_ips = set(blacklist)
+
+    # Garante que blacklist_ips e um set de strings
+    blacklist_ips = set(blacklist_ips)
+
     # Junta todos os IPs suspeitos das tres fontes
-    todos_ips = set(brute.keys()) | set(scan.keys()) | set(blacklist)
+    todos_ips = set(brute.keys()) | set(scan.keys()) | blacklist_ips
 
     resumo = []
     for ip in todos_ips:
-        motivos = []
+        deteccoes = []
         niveis = []
 
-        # Verifica em quais deteccoes o IP apareceu
         if ip in brute:
-            motivos.append("Forca Bruta")
+            deteccoes.append("brute_force")
             niveis.append(MAPA_SEVERIDADE[brute[ip]["severidade"]])
 
         if ip in scan:
-            motivos.append("Port Scan")
+            deteccoes.append("port_scan")
             niveis.append(MAPA_SEVERIDADE[scan[ip]["severidade"]])
 
-        if ip in blacklist:
-            motivos.append("Blacklist")
+        if ip in blacklist_ips:
+            deteccoes.append("blacklist")
             niveis.append(3)  # Blacklist = severidade ALTA minima
 
-        # Logica de risco composto: mais motivos = maior severidade
-        quantidade_motivos = len(motivos)
+        # Pontuacao = soma dos niveis de severidade de cada deteccao
+        pontuacao = sum(niveis)
+
+        # Severidade final baseada no numero de deteccoes e nivel base
+        quantidade = len(deteccoes)
         nivel_base = max(niveis) if niveis else 1
 
-        if quantidade_motivos >= 3:
-            nivel_final = 4  # CRITICA se aparecer nas 3 deteccoes
-        elif quantidade_motivos == 2:
-            nivel_final = min(nivel_base + 1, 4)  # Sobe um nivel
+        if quantidade >= 3:
+            nivel_final = 4
+        elif quantidade == 2:
+            nivel_final = min(nivel_base + 1, 4)
         else:
             nivel_final = nivel_base
 
         resumo.append({
             "ip": ip,
-            "motivos": motivos,
+            "deteccoes": deteccoes,
+            "pontuacao": pontuacao,
             "severidade": MAPA_INVERSO[nivel_final]
         })
 
-    # Ordena do mais critico para o menos
-    resumo.sort(key=lambda x: MAPA_SEVERIDADE.get(x["severidade"], 0), reverse=True)
+    # Ordena por pontuacao decrescente
+    resumo.sort(key=lambda x: x["pontuacao"], reverse=True)
     return resumo

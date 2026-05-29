@@ -15,7 +15,7 @@ from datetime import datetime
 def exibir_menu():
     """
     Exibe o menu principal do SecuraPy e retorna a opcao escolhida.
-    Valida a entrada: retorna -1 se o usuario digitar algo invalido, feito meno com ajuda de ia.
+    Valida a entrada: retorna -1 se o usuario digitar algo invalido.
     """
     print("""
 ╔══════════════════════════════════════════╗
@@ -134,14 +134,26 @@ def exportar_relatorio_json(dados, caminho):
     """
     Salva um relatorio completo em JSON formatado.
     Cria o diretorio de saida automaticamente se nao existir.
+
+    O relatorio inclui:
+        - gerado_em: timestamp de geracao
+        - total_eventos: quantidade de eventos processados
+        - total_alertas: quantidade de alertas gerados
+        - dados: payload completo passado pelo chamador
     """
     # Garante que o diretorio de saida existe
     diretorio = os.path.dirname(caminho)
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
 
+    # Extrai contadores do payload, com fallback para 0
+    total_eventos = dados.get("total_eventos", 0) if isinstance(dados, dict) else 0
+    total_alertas = dados.get("total_alertas", 0) if isinstance(dados, dict) else 0
+
     relatorio = {
         "gerado_em": datetime.now().isoformat(),
+        "total_eventos": total_eventos,
+        "total_alertas": total_alertas,
         "dados": dados
     }
 

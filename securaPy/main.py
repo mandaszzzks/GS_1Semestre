@@ -37,10 +37,6 @@ BLACKLIST = {
 
 
 def main():
-    """
-    Loop principal do menu interativo do SecuraPy SIEM.
-    Mantem o estado dos dados entre as opcoes do menu.
-    """
     eventos = []
     alertas = []
     resumo = []
@@ -73,11 +69,18 @@ def main():
             print("\n[*] Executando deteccao de anomalias...")
             brute = detectar_brute_force(eventos)
             scan = detectar_port_scan(eventos)
-            blacklist_encontrada = verificar_blacklist(eventos, BLACKLIST)
-            resumo = gerar_resumo_ameacas(brute, scan, blacklist_encontrada)
+
+            # verificar_blacklist retorna (set_ips_encontrados, dict_contagem)
+            blacklist_resultado = verificar_blacklist(eventos, BLACKLIST)
+            blacklist_encontrada, contagem_blacklist = blacklist_resultado
+
+            # gerar_resumo_ameacas aceita a tupla diretamente
+            resumo = gerar_resumo_ameacas(brute, scan, blacklist_resultado)
 
             print(f"\n[OK] Processamento concluido!")
             print(f"     IPs suspeitos identificados: {len(resumo)}")
+            if blacklist_encontrada:
+                print(f"     IPs da blacklist nos logs: {len(blacklist_encontrada)} ({', '.join(blacklist_encontrada)})")
             if resumo:
                 print("     Ameacas detectadas:")
                 for ameaca in resumo[:5]:
@@ -139,7 +142,6 @@ def main():
             alertas = enriquecer_alertas(alertas, cache_enriquecimento)
             print(f"[OK] {len(cache_enriquecimento)} IP(s) consultado(s).")
 
-            # Exibe um resumo dos IPs suspeitos enriquecidos
             if resumo:
                 for ameaca in resumo[:3]:
                     ip = ameaca.get("ip")
@@ -168,14 +170,10 @@ def main():
             try:
                 from servidor_alertas import iniciar_servidor
                 import threading
-                thread_servidor = threading.Thread(
-                    target=iniciar_servidor,
-                    daemon=True
-                )
+                thread_servidor = threading.Thread(target=iniciar_servidor, daemon=True)
                 thread_servidor.start()
                 print("[OK] Servidor iniciado na porta 9999.")
 
-                # Envia os alertas existentes para demonstracao
                 if alertas:
                     import time
                     time.sleep(1)
