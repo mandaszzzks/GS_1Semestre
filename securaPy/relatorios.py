@@ -146,16 +146,13 @@ def exportar_relatorio_json(dados, caminho):
     if diretorio:
         os.makedirs(diretorio, exist_ok=True)
 
-    # Extrai contadores do payload, com fallback para 0
-    total_eventos = dados.get("total_eventos", 0) if isinstance(dados, dict) else 0
-    total_alertas = dados.get("total_alertas", 0) if isinstance(dados, dict) else 0
-
-    relatorio = {
-        "gerado_em": datetime.now().isoformat(),
-        "total_eventos": total_eventos,
-        "total_alertas": total_alertas,
-        "dados": dados
-    }
+    # Mescla os dados recebidos com o timestamp de geracao
+    # Nao embrulha em "dados" para que as chaves fiquem acessiveis diretamente
+    relatorio = {"gerado_em": datetime.now().isoformat()}
+    if isinstance(dados, dict):
+        relatorio.update(dados)
+    else:
+        relatorio["dados"] = dados
 
     with open(caminho, "w", encoding="utf-8") as arquivo:
         json.dump(relatorio, arquivo, indent=2, ensure_ascii=False, default=str)

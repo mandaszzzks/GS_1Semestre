@@ -14,6 +14,17 @@ Detecta:
 from collections import defaultdict
 
 
+def _extrair_campo(evento, campo, detalhes_key="detalhes"):
+    """Tenta obter um campo do evento diretamente; se ausente, extrai de 'detalhes'."""
+    valor = evento.get(campo)
+    if not valor:
+        for parte in evento.get(detalhes_key, "").split():
+            if parte.startswith(f"{campo}="):
+                valor = parte.split("=", 1)[1]
+                break
+    return valor
+
+
 def detectar_brute_force(eventos, threshold=5):
     """
     Identifica IPs com muitas tentativas de login falhas.
@@ -25,18 +36,18 @@ def detectar_brute_force(eventos, threshold=5):
     contagem = defaultdict(lambda: {"tentativas": 0, "usuarios": set()})
 
     for evento in eventos:
-        # Filtra apenas eventos de autenticacao com falha
         if evento.get("fonte") == "auth" and evento.get("tipo") == "FAIL":
             ip = evento.get("ip")
             contagem[ip]["tentativas"] += 1
-            if evento.get("usuario"):
-                contagem[ip]["usuarios"].add(evento.get("usuario"))
+            # Extrai usuario do campo direto ou dos detalhes
+            usuario = _extrair_campo(evento, "usuario")
+            if usuario:
+                contagem[ip]["usuarios"].add(usuario)
 
     resultado = {}
     for ip, dados in contagem.items():
         n = dados["tentativas"]
         if n >= threshold:
-            # Severidade escala conforme o volume de tentativas
             if n > 20:
                 severidade = "CRITICA"
             elif n >= 10:
@@ -66,10 +77,10 @@ def detectar_port_scan(eventos, threshold=3):
     portas_por_ip = defaultdict(set)
 
     for evento in eventos:
-        # Foca em bloqueios de firewall com porta de destino registrada
         if evento.get("fonte") == "firewall" and evento.get("tipo") == "BLOCK":
             ip = evento.get("ip")
-            dport = evento.get("dport")
+            # Extrai dport do campo direto ou dos detalhes
+            dport = _extrair_campo(evento, "dport")
             if ip and dport:
                 portas_por_ip[ip].add(dport)
 
@@ -77,7 +88,6 @@ def detectar_port_scan(eventos, threshold=3):
     for ip, portas in portas_por_ip.items():
         quantidade = len(portas)
         if quantidade >= threshold:
-            # Quanto mais portas, mais suspeito
             if quantidade > 10:
                 severidade = "CRITICA"
             elif quantidade >= 6:
@@ -102,7 +112,6 @@ def verificar_blacklist(eventos, blacklist):
         - set de IPs maliciosos encontrados nos logs
         - dict {ip: contagem_de_eventos} para cada IP malicioso
     """
-    # Conta quantos eventos cada IP gerou
     contagem_por_ip = defaultdict(int)
     for evento in eventos:
         ip = evento.get("ip")
@@ -110,11 +119,7 @@ def verificar_blacklist(eventos, blacklist):
             contagem_por_ip[ip] += 1
 
     blacklist_set = set(blacklist)
-
-    # IPs que estao nos logs E na blacklist
     ips_maliciosos = {ip for ip in contagem_por_ip if ip in blacklist_set}
-
-    # Dict de contagem apenas para os IPs maliciosos encontrados
     contagem_maliciosos = {ip: contagem_por_ip[ip] for ip in ips_maliciosos}
 
     return ips_maliciosos, contagem_maliciosos
@@ -139,14 +144,10 @@ def gerar_resumo_ameacas(brute, scan, blacklist):
 
     # Normaliza blacklist: aceita tupla de verificar_blacklist ou set/lista direto
     if isinstance(blacklist, tuple):
-        blacklist_ips = blacklist[0]  # (set_ips, contagem) -> pega o set
+        blacklist_ips = set(blacklist[0])  # (set_ips, contagem) -> pega o set
     else:
         blacklist_ips = set(blacklist)
 
-    # Garante que blacklist_ips e um set de strings
-    blacklist_ips = set(blacklist_ips)
-
-    # Junta todos os IPs suspeitos das tres fontes
     todos_ips = set(brute.keys()) | set(scan.keys()) | blacklist_ips
 
     resumo = []
@@ -164,12 +165,9 @@ def gerar_resumo_ameacas(brute, scan, blacklist):
 
         if ip in blacklist_ips:
             deteccoes.append("blacklist")
-            niveis.append(3)  # Blacklist = severidade ALTA minima
+            niveis.append(3)
 
-        # Pontuacao = soma dos niveis de severidade de cada deteccao
         pontuacao = sum(niveis)
-
-        # Severidade final baseada no numero de deteccoes e nivel base
         quantidade = len(deteccoes)
         nivel_base = max(niveis) if niveis else 1
 
@@ -187,6 +185,5 @@ def gerar_resumo_ameacas(brute, scan, blacklist):
             "severidade": MAPA_INVERSO[nivel_final]
         })
 
-    # Ordena por pontuacao decrescente
     resumo.sort(key=lambda x: x["pontuacao"], reverse=True)
     return resumo
