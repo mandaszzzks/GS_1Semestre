@@ -84,7 +84,7 @@ def main():
             if resumo:
                 print("     Ameacas detectadas:")
                 for ameaca in resumo[:5]:
-                    print(f"       [{ameaca['severidade']}] {ameaca['ip']} - {', '.join(ameaca['motivos'])}")
+                    print(f"       [{ameaca['severidade']}] {ameaca['ip']} - {', '.join(ameaca['deteccoes'])}")
 
         # --- Opcao 2: Resumo geral ---
         elif opcao == 2:
