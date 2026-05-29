@@ -3,116 +3,145 @@ Modulo 5 - Enriquecimento de IPs
 Adiciona contexto geografico e organizacional aos IPs suspeitos
 consultando a API publica do ipinfo.io.
 
-Classifica IPs em privados (rede interna) e publicos, e consulta
-apenas os publicos para economizar requisicoes.
+Desenvolvido por: Caique
 
-Formato do resultado de enriquecimento:
-{
-    "ip": "185.220.101.1",
-    "privado": False,
-    "cidade": "Frankfurt am Main",
-    "regiao": "Hesse",
-    "pais": "DE",
-    "org": "AS208294 Fastethernet",
-    "hostname": "tor-exit.r2"
-}
+Classifica IPs em privados (rede interna) e publicos, consultando
+apenas os publicos para economizar requisicoes.
 """
 
+import ipaddress
 import requests
-import json
+from requests.exceptions import Timeout, ConnectionError, HTTPError, RequestException
+
+IPINFO_URL = "https://ipinfo.io/{ip}/json"
 
 
 def eh_ip_privado(ip):
     """
     Verifica se um endereco IP pertence a uma faixa de rede privada (RFC 1918).
+    IPs privados nao precisam ser consultados na API externa.
 
-    Parametros:
-        ip (str): endereco IPv4 no formato "x.x.x.x"
-
-    Retorna:
-        bool: True se o IP for privado, False se for publico
-
-    Faixas privadas:
-        10.0.0.0    - 10.255.255.255   (10.x.x.x)
-        172.16.0.0  - 172.31.255.255   (172.16-31.x.x)
-        192.168.0.0 - 192.168.255.255  (192.168.x.x)
-        127.0.0.0   - 127.255.255.255  (127.x.x.x - loopback)
-
-    Dicas:
-        - Use ip.split(".") para separar os octetos
-        - Converta para int: octetos = [int(x) for x in ip.split(".")]
-        - Verifique cada faixa com condicionais
-        - Lembre de verificar 172.16-31 (segundo octeto entre 16 e 31)
+    Retorna True se privado, False se publico.
     """
-    pass
+    try:
+        return ipaddress.ip_address(ip).is_private
+    except ValueError:
+        return False
+
+
+def validar_ip(ip):
+    """Verifica se o endereco IP tem formato valido."""
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
 
 
 def consultar_ip(ip, cache):
     """
-    Consulta a API do ipinfo.io para obter informacoes de geolocalizacao.
+    Consulta a API do ipinfo.io para obter dados de geolocalizacao do IP.
+    Usa cache para nao repetir consultas ao mesmo IP.
 
-    Parametros:
-        ip (str): endereco IP publico a ser consultado
-        cache (dict): dicionario usado como cache de consultas anteriores
-
-    Retorna:
-        dict: informacoes do IP com chaves: ip, cidade, regiao, pais, org, hostname
-        Retorna dict com valores "Desconhecido" em caso de erro.
-
-    Comportamento esperado:
-        - Se o IP ja estiver no cache, retorna do cache sem consultar a API
-        - Se for IP privado, retorna dados fixos ("Rede Interna") sem consultar
-        - Faz GET em https://ipinfo.io/{ip}/json com timeout de 5 segundos
-        - Armazena resultado no cache antes de retornar
-        - Trata: ConnectionError, Timeout, status != 200, JSONDecodeError
-
-    Dicas:
-        - if ip in cache: return cache[ip]
-        - resposta = requests.get(f"https://ipinfo.io/{ip}/json", timeout=5)
-        - dados = resposta.json()
-        - Use dados.get("city", "Desconhecido") para valores opcionais
-        - cache[ip] = resultado  (salva no cache)
+    Retorna dict com: ip, privado, cidade, regiao, pais, org, hostname
     """
-    pass
+    # Se ja consultamos esse IP, retorna do cache sem fazer nova requisicao
+    if ip in cache:
+        return cache[ip]
+
+    # IPs invalidos retornam dados padrao sem consultar a API
+    if not validar_ip(ip):
+        return {"ip": ip, "erro": "IP invalido"}
+
+    # IPs privados nao precisam de consulta externa
+    if eh_ip_privado(ip):
+        resultado = {
+            "ip": ip,
+            "privado": True,
+            "pais": "Rede Interna",
+            "cidade": "-",
+            "regiao": "-",
+            "org": "-",
+            "hostname": "-"
+        }
+        cache[ip] = resultado
+        return resultado
+
+    # Consulta a API externa para IPs publicos
+    try:
+        resposta = requests.get(IPINFO_URL.format(ip=ip), timeout=5)
+
+        # Trata limite de requisicoes da API gratuita
+        if resposta.status_code == 429:
+            return {"ip": ip, "erro": "Limite de requisicoes excedido (API)"}
+
+        resposta.raise_for_status()
+        dados = resposta.json()
+
+        resultado = {
+            "ip": ip,
+            "privado": False,
+            "pais": dados.get("country", "Desconhecido"),
+            "cidade": dados.get("city", "Desconhecido"),
+            "regiao": dados.get("region", "Desconhecido"),
+            "org": dados.get("org", "Desconhecido"),
+            "hostname": dados.get("hostname", "-")
+        }
+
+        cache[ip] = resultado
+        return resultado
+
+    except Timeout:
+        return {"ip": ip, "erro": "Timeout na consulta"}
+    except ConnectionError:
+        return {"ip": ip, "erro": "Sem conexao com a API"}
+    except HTTPError as erro:
+        return {"ip": ip, "erro": str(erro)}
+    except RequestException as erro:
+        return {"ip": ip, "erro": str(erro)}
 
 
 def enriquecer_alertas(alertas, cache):
     """
-    Adiciona informacoes de geolocalizacao a uma lista de alertas.
+    Adiciona informacoes de geolocalizacao a cada alerta.
+    IPs repetidos usam o cache para evitar consultas duplicadas.
 
-    Parametros:
-        alertas (list[dict]): lista de alertas (cada um tem campo "ip")
-        cache (dict): cache de consultas de IP
-
-    Retorna:
-        list[dict]: mesmos alertas com campo adicional "geolocalizacao"
-
-    Comportamento esperado:
-        - Para cada alerta, consulta o IP (usando cache)
-        - Adiciona campo "geolocalizacao" ao alerta com os dados retornados
-        - IPs privados recebem geolocalizacao com "Rede Interna"
-        - IPs repetidos usam o cache (sem consulta duplicada)
-
-    Dicas:
-        - Extraia IPs unicos primeiro para minimizar consultas
-        - Use um set para coletar IPs unicos: ips = {a["ip"] for a in alertas}
-        - Consulte cada IP unico uma vez, depois distribua pelos alertas
+    Retorna os mesmos alertas com campo adicional 'geolocalizacao'.
     """
-    pass
+    # Coleta IPs unicos para minimizar consultas
+    ips_unicos = {alerta.get("ip") for alerta in alertas if alerta.get("ip")}
+
+    # Consulta cada IP unico uma vez
+    dados_por_ip = {}
+    for ip in ips_unicos:
+        dados_por_ip[ip] = consultar_ip(ip, cache)
+
+    # Distribui os dados pelos alertas
+    alertas_enriquecidos = []
+    for alerta in alertas:
+        ip = alerta.get("ip")
+        if ip:
+            alerta_enriquecido = {**alerta, "geolocalizacao": dados_por_ip.get(ip, {})}
+            alertas_enriquecidos.append(alerta_enriquecido)
+
+    return alertas_enriquecidos
 
 
 def exibir_enriquecimento(dados_ip):
-    """
-    Exibe as informacoes de um IP de forma formatada no terminal.
+    """Exibe as informacoes de um IP de forma legivel no terminal."""
+    print("\n===== INFORMACOES DO IP =====")
+    privado = dados_ip.get("privado", False)
+    print(f"{'IP:':<15} {dados_ip.get('ip', '-')}")
+    print(f"{'Tipo:':<15} {'Rede Interna' if privado else 'IP Publico'}")
 
-    Parametros:
-        dados_ip (dict): dicionario retornado por consultar_ip()
+    if not privado:
+        print(f"{'Pais:':<15} {dados_ip.get('pais', '-')}")
+        print(f"{'Cidade:':<15} {dados_ip.get('cidade', '-')}")
+        print(f"{'Regiao:':<15} {dados_ip.get('regiao', '-')}")
+        print(f"{'Organizacao:':<15} {dados_ip.get('org', '-')}")
+        print(f"{'Hostname:':<15} {dados_ip.get('hostname', '-')}")
 
-    Comportamento esperado:
-        - Exibe IP, cidade, regiao, pais e organizacao de forma legivel
-        - Indica se eh IP privado ou publico
+    if "erro" in dados_ip:
+        print(f"{'Erro:':<15} {dados_ip['erro']}")
 
-    Dicas:
-        - Use f-strings com alinhamento: f"{'IP:':<15} {dados['ip']}"
-    """
-    pass
+    print("=============================")

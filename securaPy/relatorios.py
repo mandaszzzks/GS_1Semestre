@@ -1,171 +1,170 @@
 """
 Modulo 6 - Dashboard CLI e Relatorios
-Interface interativa do SIEM com menu de opcoes, filtros de eventos,
-busca por IP, ranking de ameacas e exportacao de relatorios em JSON.
+Interface interativa do SIEM com menu, filtros, busca por IP,
+ranking de ameacas e exportacao de relatorios em JSON.
+
+Desenvolvido por: Caique
 """
 
 import json
 import os
+from collections import Counter
 from datetime import datetime
 
 
 def exibir_menu():
     """
     Exibe o menu principal do SecuraPy e retorna a opcao escolhida.
-
-    Retorna:
-        int: numero da opcao escolhida (0-9)
-        Retorna -1 se o usuario digitar algo invalido.
-
-    Comportamento esperado:
-        - Exibe o menu formatado com as opcoes numeradas (0-9)
-        - Le a entrada do usuario com input()
-        - Converte para int e retorna
-        - Se a entrada nao for um numero valido, retorna -1
-
-    Menu:
-        1. Carregar e processar logs
-        2. Resumo geral
-        3. Filtrar eventos
-        4. Buscar IP
-        5. Top 10 IPs suspeitos
-        6. Ver alertas por severidade
-        7. Enriquecer IPs suspeitos
-        8. Exportar relatorio JSON
-        9. Iniciar servidor de alertas
-        0. Sair
-
-    Dicas:
-        - Use print() para desenhar o menu
-        - Envolva int(input()) em try/except ValueError
+    Valida a entrada: retorna -1 se o usuario digitar algo invalido, feito meno com ajuda de ia.
     """
-    pass
+    print("""
+╔══════════════════════════════════════════╗
+║         SecuraPy SIEM — Menu             ║
+╠══════════════════════════════════════════╣
+║  1. Carregar e processar logs            ║
+║  2. Resumo geral                         ║
+║  3. Filtrar eventos                      ║
+║  4. Buscar IP                            ║
+║  5. Top 10 IPs suspeitos                 ║
+║  6. Ver alertas por severidade           ║
+║  7. Enriquecer IPs suspeitos             ║
+║  8. Exportar relatorio JSON              ║
+║  9. Iniciar servidor de alertas          ║
+║  0. Sair                                 ║
+╚══════════════════════════════════════════╝""")
+
+    try:
+        return int(input("Escolha uma opcao: ").strip())
+    except ValueError:
+        return -1
 
 
 def resumo_geral(eventos, alertas):
     """
-    Exibe um resumo com contadores gerais do processamento.
-
-    Parametros:
-        eventos (list[dict]): todos os eventos carregados
-        alertas (list[dict]): todos os alertas gerados
-
-    Comportamento esperado:
-        - Conta eventos por fonte (auth, firewall, web)
-        - Conta alertas por severidade (CRITICA, ALTA, MEDIA, BAIXA, INFO)
-        - Exibe total geral de eventos e alertas
-        - Formata como tabela legivel
-
-    Dicas:
-        - Use dicionario como contador: contadores = {}
-        - contadores[fonte] = contadores.get(fonte, 0) + 1
-        - Faca o mesmo para severidades dos alertas
+    Exibe contadores gerais: eventos por fonte e alertas por severidade.
     """
-    pass
+    total_eventos = len(eventos)
+    total_alertas = len(alertas)
+
+    # Conta eventos agrupados por fonte
+    fontes = Counter(evento.get("fonte", "desconhecida") for evento in eventos)
+
+    # Conta alertas agrupados por severidade
+    severidades = Counter(alerta.get("severidade", "desconhecida") for alerta in alertas)
+
+    print("\n===== RESUMO GERAL =====")
+    print(f"Total de eventos : {total_eventos}")
+    print(f"Total de alertas : {total_alertas}")
+
+    print("\n--- Eventos por fonte ---")
+    for fonte, quantidade in sorted(fontes.items()):
+        print(f"  {fonte:<12}: {quantidade}")
+
+    print("\n--- Alertas por severidade ---")
+    ordem = ["CRITICA", "ALTA", "MEDIA", "BAIXA", "INFO"]
+    for nivel in ordem:
+        if nivel in severidades:
+            print(f"  {nivel:<10}: {severidades[nivel]}")
+    print("========================")
 
 
 def filtrar_eventos(eventos, fonte=None, tipo=None, ip=None):
     """
     Filtra eventos pelos criterios fornecidos.
-
-    Parametros:
-        eventos (list[dict]): lista de eventos
-        fonte (str ou None): filtrar por fonte ("auth", "firewall", "web")
-        tipo (str ou None): filtrar por tipo ("FAIL", "BLOCK", "GET", etc.)
-        ip (str ou None): filtrar por endereco IP
-
-    Retorna:
-        list[dict]: eventos que atendem TODOS os criterios fornecidos
-        Criterios None sao ignorados (nao filtram).
-
-    Dicas:
-        - Use list comprehension com condicoes
-        - Para cada criterio que nao for None, adicione uma condicao
-        - Exemplo: [e for e in eventos if (fonte is None or e["fonte"] == fonte)]
+    Criterios com valor None sao ignorados (sem filtro para aquele campo).
     """
-    pass
+    return [
+        evento for evento in eventos
+        if (fonte is None or evento.get("fonte") == fonte)
+        and (tipo is None or evento.get("tipo") == tipo)
+        and (ip is None or evento.get("ip") == ip)
+    ]
 
 
 def buscar_ip(ip, eventos, alertas, cache_enriquecimento):
     """
     Exibe relatorio completo de um IP: eventos, alertas e geolocalizacao.
-
-    Parametros:
-        ip (str): endereco IP a buscar
-        eventos (list[dict]): todos os eventos
-        alertas (list[dict]): todos os alertas
-        cache_enriquecimento (dict): cache de consultas de IP
-
-    Comportamento esperado:
-        - Filtra eventos desse IP
-        - Filtra alertas desse IP
-        - Consulta enriquecimento (se disponivel)
-        - Exibe tudo formatado
-
-    Dicas:
-        - Reutilize filtrar_eventos(eventos, ip=ip)
-        - Para alertas: [a for a in alertas if a["ip"] == ip]
     """
-    pass
+    eventos_do_ip = [e for e in eventos if e.get("ip") == ip]
+    alertas_do_ip = [a for a in alertas if a.get("ip") == ip]
+    enriquecimento = cache_enriquecimento.get(ip)
+
+    print(f"\n===== BUSCA: {ip} =====")
+    print(f"Eventos encontrados : {len(eventos_do_ip)}")
+    print(f"Alertas encontrados : {len(alertas_do_ip)}")
+
+    if eventos_do_ip:
+        print("\n--- Eventos ---")
+        for ev in eventos_do_ip[:10]:  # Mostra ate 10
+            print(f"  [{ev.get('timestamp')}] {ev.get('fonte')} | {ev.get('tipo')} | {ev.get('detalhes')}")
+
+    if alertas_do_ip:
+        print("\n--- Alertas ---")
+        for al in alertas_do_ip:
+            print(f"  [{al.get('severidade')}] {al.get('regra_nome')} - {al.get('descricao')}")
+
+    if enriquecimento:
+        print("\n--- Geolocalizacao ---")
+        privado = enriquecimento.get("privado", False)
+        print(f"  Tipo    : {'Rede Interna' if privado else 'IP Publico'}")
+        if not privado:
+            print(f"  Pais    : {enriquecimento.get('pais', '-')}")
+            print(f"  Cidade  : {enriquecimento.get('cidade', '-')}")
+            print(f"  Org     : {enriquecimento.get('org', '-')}")
+
+    print("=" * (len(ip) + 14))
 
 
 def top_ips(eventos, n=10):
     """
-    Retorna os N IPs com mais eventos registrados.
-
-    Parametros:
-        eventos (list[dict]): lista de eventos
-        n (int): quantidade de IPs a retornar (padrao: 10)
-
-    Retorna:
-        list[tuple]: lista de tuplas (ip, contagem) ordenada por contagem decrescente
-
-    Dicas:
-        - Use dicionario para contar eventos por IP
-        - Converta para lista de tuplas: list(contagem.items())
-        - Ordene com sorted(lista, key=lambda x: x[1], reverse=True)
-        - Retorne apenas os primeiros N: resultado[:n]
+    Retorna e exibe os N IPs com mais eventos registrados.
     """
-    pass
+    ips = [evento.get("ip") for evento in eventos if evento.get("ip")]
+    ranking = Counter(ips).most_common(n)
+
+    print(f"\n===== TOP {n} IPs =====")
+    for posicao, (ip, quantidade) in enumerate(ranking, start=1):
+        print(f"  {posicao:02}. {ip:<20} {quantidade} evento(s)")
+    print("===================")
+
+    return ranking
 
 
 def exportar_relatorio_json(dados, caminho):
     """
-    Salva um relatorio completo em formato JSON.
-
-    Parametros:
-        dados (dict): dicionario com todos os dados do relatorio
-        caminho (str): caminho do arquivo de saida
-
-    Comportamento esperado:
-        - Cria o diretorio de saida se nao existir
-        - Salva o JSON formatado com indent=2 e ensure_ascii=False
-        - Imprime confirmacao com o caminho do arquivo salvo
-
-    Dicas:
-        - Use os.makedirs(os.path.dirname(caminho), exist_ok=True)
-        - Use json.dump(dados, f, indent=2, ensure_ascii=False)
-        - Converta sets para listas antes de salvar (JSON nao suporta set)
+    Salva um relatorio completo em JSON formatado.
+    Cria o diretorio de saida automaticamente se nao existir.
     """
-    pass
+    # Garante que o diretorio de saida existe
+    diretorio = os.path.dirname(caminho)
+    if diretorio:
+        os.makedirs(diretorio, exist_ok=True)
+
+    relatorio = {
+        "gerado_em": datetime.now().isoformat(),
+        "dados": dados
+    }
+
+    with open(caminho, "w", encoding="utf-8") as arquivo:
+        json.dump(relatorio, arquivo, indent=2, ensure_ascii=False, default=str)
+
+    print(f"\n[OK] Relatorio exportado: {caminho}")
 
 
 def exibir_tabela(dados, colunas):
     """
     Exibe uma lista de dicionarios como tabela formatada no terminal.
-
-    Parametros:
-        dados (list[dict]): lista de dicionarios a exibir
-        colunas (list[str]): chaves a exibir como colunas
-
-    Comportamento esperado:
-        - Exibe cabecalho com os nomes das colunas
-        - Exibe separador (linha de tracos)
-        - Exibe cada linha de dados alinhada com as colunas
-        - Se dados estiver vazio, exibe "Nenhum dado encontrado"
-
-    Dicas:
-        - Calcule a largura de cada coluna: max(len(str(d[col])) for d in dados)
-        - Use f-string com largura: f"{valor:<{largura}}"
     """
-    pass
+    if not dados:
+        print("Nenhum dado encontrado.")
+        return
+
+    largura = 22
+    cabecalho = "".join(coluna.upper().ljust(largura) for coluna in colunas)
+    separador = "-" * len(cabecalho)
+
+    print("\n" + cabecalho)
+    print(separador)
+    for item in dados:
+        linha = "".join(str(item.get(coluna, "-")).ljust(largura) for coluna in colunas)
+        print(linha)

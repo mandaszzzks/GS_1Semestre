@@ -2,43 +2,44 @@
 SecuraPy SIEM - Ponto de Entrada Principal
 Integra todos os modulos: coletor, regras, detector, enriquecimento,
 servidor de alertas e relatorios em um menu interativo.
+
+Desenvolvido por: Caique
 """
 
-# Configuracoes
+from coletor import carregar_todos_os_logs
+from regras import carregar_regras, aplicar_regras
+from detector import (
+    detectar_brute_force,
+    detectar_port_scan,
+    verificar_blacklist,
+    gerar_resumo_ameacas
+)
+from enriquecimento import enriquecer_alertas, consultar_ip, exibir_enriquecimento
+from relatorios import (
+    exibir_menu,
+    resumo_geral,
+    filtrar_eventos,
+    buscar_ip,
+    top_ips,
+    exportar_relatorio_json,
+    exibir_tabela
+)
+
+# Configuracoes globais
 PASTA_LOGS = "logs"
 ARQUIVO_REGRAS = "config/regras.json"
-BLACKLIST = {"185.220.101.1", "45.33.32.156", "91.240.118.172", "23.94.5.100"}
+BLACKLIST = {
+    "185.220.101.1",
+    "45.33.32.156",
+    "91.240.118.172",
+    "23.94.5.100"
+}
 
 
 def main():
     """
-    Funcao principal que roda o loop do menu interativo.
-
-    Fluxo esperado:
-        1. Opcao 1: Carregar logs -> aplicar regras -> detectar anomalias
-        2. Opcao 2-7: Consultar e visualizar resultados
-        3. Opcao 8: Exportar relatorio
-        4. Opcao 9: Iniciar servidor de alertas
-        5. Opcao 0: Sair
-
-    Variaveis que devem ser mantidas entre as opcoes:
-        - eventos: lista de todos os eventos carregados
-        - alertas: lista de alertas das regras
-        - resumo: resumo de ameacas do detector
-        - cache_enriquecimento: cache de consultas de IP
-
-    Dicas:
-        - Inicialize as variaveis como listas/dicts vazios antes do loop
-        - Na opcao 1, chame os modulos em sequencia:
-          1. carregar_todos_os_logs(PASTA_LOGS)
-          2. carregar_regras(ARQUIVO_REGRAS)
-          3. aplicar_regras(eventos, regras)
-          4. detectar_brute_force(eventos)
-          5. detectar_port_scan(eventos)
-          6. verificar_blacklist(eventos, BLACKLIST)
-          7. gerar_resumo_ameacas(brute, scan, blacklist_res)
-        - Nas opcoes 2-8, verifique se os dados ja foram carregados
-          (if not eventos: print("Carregue os logs primeiro (opcao 1)"))
+    Loop principal do menu interativo do SecuraPy SIEM.
+    Mantem o estado dos dados entre as opcoes do menu.
     """
     eventos = []
     alertas = []
@@ -52,66 +53,148 @@ def main():
     while True:
         opcao = exibir_menu()
 
+        # --- Opcao 1: Carregar e processar todos os logs ---
         if opcao == 1:
-            # TODO: Carregar e processar logs
-            # 1. eventos = carregar_todos_os_logs(PASTA_LOGS)
-            # 2. regras = carregar_regras(ARQUIVO_REGRAS)
-            # 3. alertas = aplicar_regras(eventos, regras)
-            # 4. brute = detectar_brute_force(eventos)
-            # 5. scan = detectar_port_scan(eventos)
-            # 6. bl = verificar_blacklist(eventos, BLACKLIST)
-            # 7. resumo = gerar_resumo_ameacas(brute, scan, bl)
-            pass
+            print("\n[*] Carregando logs...")
+            eventos = carregar_todos_os_logs(PASTA_LOGS)
 
+            if not eventos:
+                print("[AVISO] Nenhum evento carregado. Verifique a pasta 'logs/'.")
+                continue
+
+            print(f"[*] Total de eventos carregados: {len(eventos)}")
+
+            print("\n[*] Carregando regras de deteccao...")
+            regras = carregar_regras(ARQUIVO_REGRAS)
+
+            print("\n[*] Aplicando regras aos eventos...")
+            alertas = aplicar_regras(eventos, regras)
+
+            print("\n[*] Executando deteccao de anomalias...")
+            brute = detectar_brute_force(eventos)
+            scan = detectar_port_scan(eventos)
+            blacklist_encontrada = verificar_blacklist(eventos, BLACKLIST)
+            resumo = gerar_resumo_ameacas(brute, scan, blacklist_encontrada)
+
+            print(f"\n[OK] Processamento concluido!")
+            print(f"     IPs suspeitos identificados: {len(resumo)}")
+            if resumo:
+                print("     Ameacas detectadas:")
+                for ameaca in resumo[:5]:
+                    print(f"       [{ameaca['severidade']}] {ameaca['ip']} - {', '.join(ameaca['motivos'])}")
+
+        # --- Opcao 2: Resumo geral ---
         elif opcao == 2:
-            # TODO: Resumo geral
-            # resumo_geral(eventos, alertas)
-            pass
+            if not eventos:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
+            resumo_geral(eventos, alertas)
 
+        # --- Opcao 3: Filtrar eventos ---
         elif opcao == 3:
-            # TODO: Filtrar eventos
-            # Pedir ao usuario: fonte, tipo e/ou ip
-            # resultado = filtrar_eventos(eventos, fonte, tipo, ip)
-            pass
+            if not eventos:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
 
+            print("\nFiltrar por (pressione Enter para ignorar o filtro):")
+            fonte = input("  Fonte (auth/firewall/web): ").strip() or None
+            tipo = input("  Tipo (FAIL/BLOCK/GET/etc): ").strip() or None
+            ip_filtro = input("  IP: ").strip() or None
+
+            resultado = filtrar_eventos(eventos, fonte=fonte, tipo=tipo, ip=ip_filtro)
+            print(f"\n{len(resultado)} evento(s) encontrado(s).")
+            exibir_tabela(resultado, ["timestamp", "fonte", "tipo", "ip", "detalhes"])
+
+        # --- Opcao 4: Buscar IP ---
         elif opcao == 4:
-            # TODO: Buscar IP
-            # ip = input("Digite o IP: ")
-            # buscar_ip(ip, eventos, alertas, cache_enriquecimento)
-            pass
+            if not eventos:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
+            ip_busca = input("\nDigite o IP a buscar: ").strip()
+            buscar_ip(ip_busca, eventos, alertas, cache_enriquecimento)
 
+        # --- Opcao 5: Top 10 IPs ---
         elif opcao == 5:
-            # TODO: Top 10 IPs suspeitos
-            # resultado = top_ips(eventos)
-            pass
+            if not eventos:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
+            top_ips(eventos, n=10)
 
+        # --- Opcao 6: Alertas por severidade ---
         elif opcao == 6:
-            # TODO: Ver alertas por severidade
-            # Pedir severidade ao usuario e filtrar
-            pass
+            if not alertas:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
+            nivel = input("\nDigite a severidade (CRITICA/ALTA/MEDIA/BAIXA/INFO): ").strip().upper()
+            filtrados = [a for a in alertas if a.get("severidade") == nivel]
+            print(f"\n{len(filtrados)} alerta(s) com severidade {nivel}:")
+            exibir_tabela(filtrados, ["timestamp", "ip", "regra_nome", "descricao"])
 
+        # --- Opcao 7: Enriquecer IPs suspeitos ---
         elif opcao == 7:
-            # TODO: Enriquecer IPs suspeitos
-            # alertas = enriquecer_alertas(alertas, cache_enriquecimento)
-            pass
+            if not alertas:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
+            print("\n[*] Enriquecendo IPs suspeitos com geolocalizacao...")
+            alertas = enriquecer_alertas(alertas, cache_enriquecimento)
+            print(f"[OK] {len(cache_enriquecimento)} IP(s) consultado(s).")
 
+            # Exibe um resumo dos IPs suspeitos enriquecidos
+            if resumo:
+                for ameaca in resumo[:3]:
+                    ip = ameaca.get("ip")
+                    if ip in cache_enriquecimento:
+                        exibir_enriquecimento(cache_enriquecimento[ip])
+
+        # --- Opcao 8: Exportar relatorio JSON ---
         elif opcao == 8:
-            # TODO: Exportar relatorio JSON
-            # exportar_relatorio_json(dados, caminho)
-            pass
+            if not eventos:
+                print("\n[AVISO] Carregue os logs primeiro (opcao 1).")
+                continue
+            nome_arquivo = f"relatorio_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            caminho = f"saida/{nome_arquivo}"
+            dados = {
+                "total_eventos": len(eventos),
+                "total_alertas": len(alertas),
+                "alertas": alertas,
+                "resumo_ameacas": resumo
+            }
+            exportar_relatorio_json(dados, caminho)
 
+        # --- Opcao 9: Iniciar servidor de alertas ---
         elif opcao == 9:
-            # TODO: Iniciar servidor de alertas
-            # from servidor_alertas import iniciar_servidor
-            # iniciar_servidor()
-            pass
+            print("\n[*] Iniciando servidor de alertas em segundo plano...")
+            print("    Conecte clientes com: python cliente_alertas.py")
+            try:
+                from servidor_alertas import iniciar_servidor
+                import threading
+                thread_servidor = threading.Thread(
+                    target=iniciar_servidor,
+                    daemon=True
+                )
+                thread_servidor.start()
+                print("[OK] Servidor iniciado na porta 9999.")
 
+                # Envia os alertas existentes para demonstracao
+                if alertas:
+                    import time
+                    time.sleep(1)
+                    from servidor_alertas import broadcast_alerta
+                    print(f"[*] Transmitindo {len(alertas)} alerta(s)...")
+                    for alerta in alertas:
+                        broadcast_alerta(alerta)
+                        time.sleep(0.1)
+                    print("[OK] Alertas transmitidos.")
+            except Exception as erro:
+                print(f"[ERRO] Nao foi possivel iniciar o servidor: {erro}")
+
+        # --- Opcao 0: Sair ---
         elif opcao == 0:
-            print("Encerrando SecuraPy. Ate logo!")
+            print("\nEncerrando SecuraPy. Ate logo!")
             break
 
         else:
-            print("Opcao invalida. Tente novamente.")
+            print("\n[AVISO] Opcao invalida. Tente novamente.")
 
 
 if __name__ == "__main__":

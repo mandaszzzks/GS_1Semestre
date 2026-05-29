@@ -1,7 +1,10 @@
 """
 Modulo 4b - Cliente de Alertas
-Conecta ao servidor de alertas e recebe notificacoes em tempo real.
-Permite enviar comandos: /status, /historico, /sair
+Conecta ao servidor e recebe notificacoes de seguranca em tempo real.
+
+Desenvolvido por: Amanda
+
+Comandos: /status, /historico, /sair
 """
 
 import socket
@@ -13,19 +16,15 @@ PORTA = 9999
 
 def receber_alertas(cliente):
     """
-    Thread que fica ouvindo mensagens do servidor e exibindo no terminal.
-
-    Parametros:
-        cliente: objeto socket conectado ao servidor
+    Thread que fica escutando o servidor e exibe mensagens no terminal
+    Roda em paralelo com o loop de input do usuario
     """
     while True:
         try:
             dados = cliente.recv(4096).decode("utf-8", errors="replace")
             if not dados:
-                # Servidor encerrou a conexao
                 print("\n[CLIENTE] Servidor desconectou.")
                 break
-            # Exibe a mensagem recebida (sem adicionar \n extra se ja tiver)
             print(dados, end="", flush=True)
         except (ConnectionResetError, BrokenPipeError, OSError):
             print("\n[CLIENTE] Conexao encerrada.")
@@ -35,18 +34,16 @@ def receber_alertas(cliente):
 def conectar_servidor(host=HOST, porta=PORTA):
     """
     Conecta ao servidor de alertas e inicia a interacao.
-
-    Parametros:
-        host (str): endereco do servidor
-        porta (int): porta do servidor
+    Usa uma thread separada para receber mensagens enquanto o
+    usuario pode digitar comandos normalmente
     """
     try:
         cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         cliente.connect((host, porta))
         print(f"Conectado ao SecuraPy SIEM ({host}:{porta})")
-        print("Comandos: /status, /historico, /sair\n")
+        print("Comandos disponiveis: /status, /historico, /sair\n")
 
-        # Thread de recepcao (daemon - encerra com o programa)
+        # Thread de recepcao - daemon para encerrar junto com o programa
         thread = threading.Thread(
             target=receber_alertas,
             args=(cliente,),
@@ -68,7 +65,7 @@ def conectar_servidor(host=HOST, porta=PORTA):
             try:
                 cliente.send((comando + "\n").encode())
             except (ConnectionResetError, BrokenPipeError, OSError):
-                print("[CLIENTE] Erro ao enviar comando. Conexao perdida.")
+                print("[CLIENTE] Erro ao enviar. Conexao perdida.")
                 break
 
             if comando == "/sair":
@@ -76,9 +73,9 @@ def conectar_servidor(host=HOST, porta=PORTA):
 
     except ConnectionRefusedError:
         print(f"[ERRO] Nao foi possivel conectar em {host}:{porta}.")
-        print("Verifique se o servidor esta rodando (python servidor_alertas.py).")
-    except OSError as e:
-        print(f"[ERRO] Falha de conexao: {e}")
+        print("Verifique se o servidor esta rodando: python servidor_alertas.py")
+    except OSError as erro:
+        print(f"[ERRO] Falha de conexao: {erro}")
     finally:
         try:
             cliente.close()

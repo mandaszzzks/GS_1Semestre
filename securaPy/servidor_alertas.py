@@ -1,11 +1,13 @@
 """
 Modulo 4a - Servidor de Alertas em Tempo Real
-Servidor TCP que aceita conexoes de multiplos clientes (consoles de monitoramento)
-e faz broadcast de alertas de seguranca para todos os clientes conectados.
+Servidor TCP que aceita conexoes de multiplos clientes e
+faz broadcast de alertas de seguranca para todos.
 
-Comandos suportados pelo cliente:
-    /status    - mostra quantos clientes conectados e alertas na sessao
-    /historico - envia os ultimos 10 alertas
+Desenvolvido por: Amanda
+
+Comandos suportados:
+    /status    - quantos clientes conectados e alertas na sessao
+    /historico - ultimos 10 alertas
     /sair      - desconecta do servidor
 """
 
@@ -13,33 +15,23 @@ import socket
 import threading
 from datetime import datetime
 
-# Configuracao
 HOST = "0.0.0.0"
 PORTA = 9999
 MAX_CLIENTES = 10
 
-# Estado global do servidor
-clientes = {}           # {conexao: endereco}
+# Estado global compartilhado entre threads
+clientes = {}          
 lock = threading.Lock()
-historico_alertas = []  # ultimos alertas formatados
+historico_alertas = []
 
 
 def formatar_alerta(alerta_dict):
     """
-    Converte um dicionario de alerta em string formatada para exibicao.
-
-    Parametros:
-        alerta_dict (dict): alerta com chaves timestamp, severidade,
-                            regra_nome, ip, descricao
-
-    Retorna:
-        str: alerta formatado, ex:
-        "[08:15:01] [CRITICA] Brute Force - 185.220.101.1 - 10 tentativas de login"
+    Converte um dicionario de alerta em string legivel para o terminal
+    Formato: [HH:MM:SS] [SEVERIDADE] Regra - IP - Descricao
     """
     timestamp = alerta_dict.get("timestamp", "")
-    # Extrai apenas a hora (HH:MM:SS) do timestamp "YYYY-MM-DD HH:MM:SS"
     hora = timestamp.split(" ")[-1] if " " in timestamp else timestamp
-
     severidade = alerta_dict.get("severidade", "INFO")
     regra_nome = alerta_dict.get("regra_nome", "Alerta")
     ip = alerta_dict.get("ip", "N/A")
@@ -50,34 +42,28 @@ def formatar_alerta(alerta_dict):
 
 def broadcast_alerta(alerta):
     """
-    Envia um alerta para todos os clientes conectados.
-
-    Parametros:
-        alerta (dict ou str): alerta a ser enviado
+    Envia um alerta para todos os clientes conectados
+    Se o alerta for dicionario, formata antes de enviar
+    Clientes que falharem sao removidos automaticamente
     """
     global historico_alertas
 
-    # Formata se for dicionario
-    if isinstance(alerta, dict):
-        mensagem = formatar_alerta(alerta)
-    else:
-        mensagem = str(alerta)
-
-    # Adiciona ao historico
+    mensagem = formatar_alerta(alerta) if isinstance(alerta, dict) else str(alerta)
     historico_alertas.append(mensagem)
 
-    # Envia para todos os clientes
-    clientes_para_remover = []
+    # Coleta a lista de conexoes com lock para evitar problemas de concorrencia
     with lock:
         conexoes = list(clientes.keys())
 
+    clientes_com_falha = []
     for conexao in conexoes:
         try:
             conexao.send((mensagem + "\n").encode())
         except (ConnectionResetError, BrokenPipeError, OSError):
-            clientes_para_remover.append(conexao)
+            clientes_com_falha.append(conexao)
 
-    for conexao in clientes_para_remover:
+    # Remove clientes que nao responderam
+    for conexao in clientes_com_falha:
         remover_cliente(conexao)
 
     if conexoes:
@@ -86,10 +72,7 @@ def broadcast_alerta(alerta):
 
 def remover_cliente(conexao):
     """
-    Remove um cliente da lista de conectados.
-
-    Parametros:
-        conexao: objeto socket do cliente
+    Remove um cliente da lista e fecha sua conexao com seguranca
     """
     with lock:
         endereco = clientes.pop(conexao, None)
@@ -100,19 +83,15 @@ def remover_cliente(conexao):
     try:
         conexao.close()
     except OSError:
-        pass  # Ja estava fechado
+        pass
 
 
 def tratar_cliente(conexao, endereco):
     """
-    Gerencia a comunicacao com um cliente individual.
-    Esta funcao roda em uma thread separada para cada cliente.
-
-    Parametros:
-        conexao: objeto socket do cliente
-        endereco: tupla (ip, porta) do cliente
+    Gerencia a comunicacao com um cliente individual
+    Roda em thread separada para nao bloquear o servidor
     """
-    # Registra o cliente
+    # Registra o novo cliente
     with lock:
         clientes[conexao] = endereco
 
@@ -120,10 +99,10 @@ def tratar_cliente(conexao, endereco):
 
     # Mensagem de boas-vindas
     boas_vindas = (
-        "=== SecuraPy SIEM - Console de Alertas ===\n"
+        "=== SecuraPy SIEM - Console de Monitoramento ===\n"
         f"Conectado em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        "Comandos disponiveis: /status, /historico, /sair\n"
-        "------------------------------------------\n"
+        "Comandos: /status  /historico  /sair\n"
+        "-------------------------------------------------\n"
     )
     try:
         conexao.send(boas_vindas.encode())
@@ -131,14 +110,13 @@ def tratar_cliente(conexao, endereco):
         remover_cliente(conexao)
         return
 
-    # Loop principal - recebe comandos do cliente
+    # Loop de recepcao de comandos do cliente
     try:
         while True:
             dados = conexao.recv(1024).decode("utf-8", errors="replace").strip()
 
             if not dados:
-                # Cliente fechou a conexao
-                break
+                break  # Cliente fechou a conexao
 
             if dados == "/sair":
                 try:
@@ -151,14 +129,11 @@ def tratar_cliente(conexao, endereco):
                 with lock:
                     total_clientes = len(clientes)
                 total_alertas = len(historico_alertas)
-                resposta = (
-                    f"Clientes conectados: {total_clientes} | "
-                    f"Alertas na sessao: {total_alertas}\n"
-                )
+                resposta = f"Clientes conectados: {total_clientes} | Alertas na sessao: {total_alertas}\n"
                 conexao.send(resposta.encode())
 
             elif dados == "/historico":
-                ultimos = historico_alertas[-10:]  # ultimos 10
+                ultimos = historico_alertas[-10:]
                 if ultimos:
                     resposta = "--- Ultimos alertas ---\n" + "\n".join(ultimos) + "\n-----------------------\n"
                 else:
@@ -166,26 +141,20 @@ def tratar_cliente(conexao, endereco):
                 conexao.send(resposta.encode())
 
             else:
-                # Comando desconhecido
                 conexao.send(f"Comando desconhecido: '{dados}'. Use /status, /historico ou /sair\n".encode())
 
     except (ConnectionResetError, BrokenPipeError, OSError):
-        pass  # Desconexao inesperada - tratada abaixo
-
+        pass
     finally:
         remover_cliente(conexao)
 
 
 def iniciar_servidor(host=HOST, porta=PORTA):
     """
-    Inicia o servidor TCP de alertas.
-
-    Parametros:
-        host (str): endereco para bind (padrao: "0.0.0.0")
-        porta (int): porta para bind (padrao: 9999)
+    Inicia o servidor TCP e fica aguardando conexoes
+    Cada cliente e tratado em uma thread separada 
     """
     servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # Permite reusar a porta imediatamente apos encerrar o servidor
     servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
@@ -201,18 +170,17 @@ def iniciar_servidor(host=HOST, porta=PORTA):
                 thread = threading.Thread(
                     target=tratar_cliente,
                     args=(conexao, endereco),
-                    daemon=True  # Encerra junto com o programa principal
+                    daemon=True
                 )
                 thread.start()
             except OSError:
-                # Servidor foi fechado (Ctrl+C)
                 break
 
     except KeyboardInterrupt:
         print("\n[SERVIDOR] Encerrando servidor...")
     finally:
         servidor.close()
-        print("[SERVIDOR] Servidor encerrado.")
+        print("[SERVIDOR] Encerrado.")
 
 
 if __name__ == "__main__":
