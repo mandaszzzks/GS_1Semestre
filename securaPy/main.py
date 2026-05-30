@@ -3,7 +3,7 @@ SecuraPy SIEM - Ponto de Entrada Principal
 Integra todos os modulos: coletor, regras, detector, enriquecimento,
 servidor de alertas e relatorios em um menu interativo.
 
-Desenvolvido por: Caique
+Desenvolvido por: Caique e Amanda
 """
 
 from coletor import carregar_todos_os_logs
@@ -115,6 +115,8 @@ def main():
                 continue
             ip_busca = input("\nDigite o IP a buscar: ").strip()
             buscar_ip(ip_busca, eventos, alertas, cache_enriquecimento)
+            dados_geo = consultar_ip(ip_busca, cache_enriquecimento)
+            exibir_enriquecimento(dados_geo)
 
         # --- Opcao 5: Top 10 IPs ---
         elif opcao == 5:
@@ -188,7 +190,7 @@ def main():
 
         # --- Opcao 0: Sair ---
         elif opcao == 0:
-            print("\nEncerrando SecuraPy. Ate logo!")
+            print("\nEncerrando SecuraPy, boa férias e Ate logo!")
             break
 
         else:
