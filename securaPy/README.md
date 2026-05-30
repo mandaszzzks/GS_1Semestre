@@ -138,77 +138,89 @@ securaPy/
 
 ---
 
-## Para a entrega: preencha as seções abaixo
 
-> **IMPORTANTE:** Antes de entregar, substitua tudo abaixo deste ponto
-> com as informações do seu grupo.
+# SecuraPy SIEM — [CodeShield]
 
----
 
-# SecuraPy SIEM — [Nome do Grupo]
+
 
 ## Integrantes
 
 | Nome | RM | Responsabilidade |
 |------|-----|-----------------|
-| [Nome completo] | [RM] | [Módulos que implementou] |
-| [Nome completo] | [RM] | [Módulos que implementou] |
-| [Nome completo] | [RM] | [Módulos que implementou] |
-| [Nome completo] | [RM] | [Módulos que implementou] |
+| [Amanda Souza Bezerra] |   [RM573911]    | [Rede, Servidor e Cliente] |
+
+| [Caique dos Santos Rodrigues] | [RM570577] | [Enriquecimento e interface] |
+
+| [Davi almeida Nascimento] | [RM569447] | [.....] |
+
+| [Maick Rosario Yamassaki] | [RM569664] | Coleta e parsing de dados |
+
+
+
+
 
 ## Descrição
 
-[Descreva em 2-3 parágrafos o que o sistema faz, quais problemas ele resolve
-e como os módulos se integram.]
+O SecuraPy detecta ameaças em logs de autenticação, firewall e acesso web de forma automática, substituindo a análise manual que atrasa a resposta a incidentes. A detecção funciona em duas camadas: o regras.py avalia eventos individualmente contra condições configuradas em JSON (força bruta por usuário, portas críticas, XSS, path traversal), enquanto o detector.py correlaciona eventos em conjunto para identificar padrões como brute force e port scan, cruzando ainda os IPs encontrados com uma blacklist.
 
-## Como executar
+O fluxo começa no coletor.py, que normaliza os logs das três fontes num formato único. Os eventos passam pelo motor de regras e pelo detector, têm os IPs enriquecidos com geolocalização via enriquecimento.py e chegam ao relatorios.py, onde o operador filtra, busca e exporta resultados. Os alertas são transmitidos em tempo real via TCP pelo servidor_alertas.py para todos os clientes conectados, e tudo é orquestrado pelo menu interativo do main.py.
 
-```bash
-# 1. Instalar dependências
-pip install requests
 
-# 2. Rodar o sistema
-cd securaPy
-python main.py
 
-# 3. Rodar os testes
-python -m pytest testes/ -v
-```
 
 ## Resultado dos testes
 
-```
-[Cole aqui a saída do pytest mostrando quantos testes passam]
-```
+
+testes/test_servidor.py::TestServidorIntegracao::test_broadcast_envia_para_multiplos PASSED [100%]
+
+============================= 197 passed in 1.34s ==============================
+
+
 
 ## Divisão de tarefas
 
-### [Nome — Pessoa A]
-- **Módulos:** [lista]
-- **O que fez:** [descreva em 2-3 frases]
-- **Dificuldades:** [o que foi mais difícil e como resolveu]
 
-### [Nome — Pessoa B]
-- **Módulos:** [lista]
-- **O que fez:** [descreva em 2-3 frases]
-- **Dificuldades:** [o que foi mais difícil e como resolveu]
+### [Maick Rosario Yamassaki — Pessoa A]
+- **Módulos:** [1 e 3]
 
-### [Nome — Pessoa C]
-- **Módulos:** [lista]
-- **O que fez:** [descreva em 2-3 frases]
-- **Dificuldades:** [o que foi mais difícil e como resolveu]
+- **O que fez:** [implementou a leitura e normalização dos logs das três fontes (auth, firewall, web) e a detecção de anomalias por correlação de eventos. Desenvolveu as funções de brute force, port scan e cruzamento com blacklist.]
 
-### [Nome — Pessoa D] (se houver)
-- **Módulos:** [lista]
-- **O que fez:** [descreva em 2-3 frases]
-- **Dificuldades:** [o que foi mais difícil e como resolveu]
+- **Dificuldades:** [implementar o tratamento de erros e a resiliência do coletor.
+Garantir que o sistema não travasse ao encontrar arquivos inexistentes ou linhas malformadas  e, ao mesmo tempo, conseguir extrair dados úteis dessas linhas "sujas" sem interromper o processamento
+Exigiu um equilíbrio cuidadoso entre o uso de ⁠try/except⁠ e a lógica de validação. Conciliar a robustez do tratamento de exceções com a necessidade de relatar exatamente onde e por que um erro ocorria foi uma dificuldade para manter o código funcional.]
 
-## Funcionalidades bônus implementadas
 
-- [ ] Correlação temporal (brute force por janela de tempo)
-- [ ] Hash de integridade dos logs (hashlib)
-- [ ] Geração automática de logs para teste
-- [ ] Criação de regras customizadas pelo menu
+
+### [Amanda Souza Bezerra — Pessoa B]
+
+- **Módulos:** [2 e 4]
+
+- **O que fez:** [Amanda desenvolveu o motor de regras que avalia cada evento contra condições configuradas em JSON, gerando alertas com severidade classificada. Implementou também o servidor TCP de alertas e o cliente que recebe as notificações em tempo real.]
+
+- **Dificuldades:** [Motor de Regras
+A dificuldade foi que cada regra precisava “enxergar” uma coisa diferente dentro do log. Uma precisava encontrar o usuário, outra a porta, outra um padrão na URL. A solução foi percorrer cada parte da linha procurando o campo certo para cada situação.
+Servidor com múltiplos clientes
+O problema foi que vários clientes conectando ao mesmo tempo podiam causar conflito na lista de conexões. A solução foi usar um “cadeado” no código (Lock) que impede duas operações de acontecerem ao mesmo tempo no mesmo lugar.]
+
+
+
+### [Caique Dos Santos Rodrigues — Pessoa C]
+- **Módulos:** [5 e 6]
+
+- **O que fez:** [construiu o módulo de enriquecimento de IPs com consulta à API do ipinfo.io e cache local, além do dashboard CLI com filtros, busca e exportação de relatórios. Integrou todos os módulos no main.py, orquestrando o fluxo completo do sistema.]
+
+- **Dificuldades:** [O principal desafio foi a integração com uma API externa na etapa de enriquecimento dos dados. Em alguns momentos, a API podia retornar erros ou demorar para responder, o que afetava o funcionamento do sistema. Para resolver isso, implementei validações e tratamento de exceções. Dessa forma, a aplicação consegue lidar com falhas sem interromper a execução. Isso tornou o processo mais confiável e estável..]
+
+
+
+### [Davi — Pessoa D] 
+- **Módulos:** [...]
+- **O que fez:** [...]
+- **Dificuldades:** [...]
+
+
+
 
 ## Demonstração em vídeo
 
