@@ -190,7 +190,7 @@ def main():
 
         # --- Opcao 0: Sair ---
         elif opcao == 0:
-            print("\nEncerrando SecuraPy, boa férias e Ate logo!")
+            print("\nEncerrando SecuraPy, boa férias bara e ate logo!")
             break
 
         else:
