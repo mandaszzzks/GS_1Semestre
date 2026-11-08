@@ -8,6 +8,7 @@ import './ux2.css';
 
 const LOGO = '/viotrace-logo.png';
 const NIVEIS = ['CRITICA', 'ALTA', 'MEDIA', 'BAIXA', 'INFO'];
+const LISTA_VAZIA = Object.freeze([]);
 const NOMES = { CRITICA: 'Crítica', ALTA: 'Alta', MEDIA: 'Média', BAIXA: 'Baixa', INFO: 'Informativa' };
 const paginas = {
   dashboard: { label: 'Visão geral', icon: 'dashboard', caption: 'Panorama da operação' },
@@ -34,7 +35,6 @@ function textoHora(valor) {
   return texto.includes(' ') ? texto.split(' ')[1]?.slice(0, 8) : texto.includes('T') ? texto.split('T')[1]?.slice(0, 8) : texto || '—';
 }
 function textoErro(json, padrao) { return typeof json?.detail === 'string' ? json.detail : padrao; }
-function plural(n, s, p) { return `${n} ${n === 1 ? s : p}`; }
 
 function Badge({ value, small = false }) {
   const s = nivel(value);
@@ -147,7 +147,6 @@ export default function App() {
     return () => { document.body.style.overflow = anterior; window.removeEventListener('keydown', esc); };
   }, [ipSelecionado]);
   useEffect(() => { chatFim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [mensagens, enviando]);
-  useEffect(() => { setPaginaAlertas(1); }, [buscaAlerta, severidade]);
   useEffect(() => {
     if (!feedback) return;
     const timer = window.setTimeout(() => setFeedback(''), 4400);
@@ -200,9 +199,10 @@ export default function App() {
     finally { setEnviando(false); }
   }
 
-  const alertas = dados?.alertas || [];
-  const eventos = Array.isArray(dados?.eventos) ? dados.eventos : [];
-  const correlacoes = Array.isArray(dados?.resumo_ameacas) ? dados.resumo_ameacas : [];
+  // Evita criar arrays novos em cada renderizacao.
+  const alertas = Array.isArray(dados?.alertas) ? dados.alertas : LISTA_VAZIA;
+  const eventos = Array.isArray(dados?.eventos) ? dados.eventos : LISTA_VAZIA;
+  const correlacoes = Array.isArray(dados?.resumo_ameacas) ? dados.resumo_ameacas : LISTA_VAZIA;
   const totais = useMemo(() => Object.fromEntries(NIVEIS.map(n => [n, alertas.filter(a => nivel(a.severidade) === n).length])), [alertas]);
   const ips = useMemo(() => Object.values(alertas.reduce((mapa, a) => {
     if (!a.ip) return mapa;
@@ -259,7 +259,7 @@ export default function App() {
           <section className="surface table-panel"><div className="section-head"><div><span className="eyebrow">HISTÓRICO RECENTE</span><h3>Últimos alertas registrados</h3></div><button className="text-action" onClick={() => navegar('alertas')}>Ver todos <Icon name="arrow" size={16}/></button></div><SecurityTable items={[...alertas].slice(-6).reverse()} onInvestigate={abrirIp} compact /></section>
           <div className="dashboard-bottom"><section className="surface"><div className="section-head"><div><span className="eyebrow">ENDEREÇOS EM EVIDÊNCIA</span><h3>IPs com mais alertas</h3></div><button className="text-action" onClick={() => navegar('inteligencia')}>Ver análise <Icon name="arrow" size={15}/></button></div>{ips.slice(0, 5).map((it, i) => <button type="button" className="rank-row" key={it.ip} onClick={() => abrirIp(it.ip)}><span className="rank-num">{String(i + 1).padStart(2, '0')}</span><span className="mono">{it.ip}</span><span className="rank-track"><span style={{ width: `${it.total / (ips[0]?.total || 1) * 100}%` }} /></span><strong>{it.total}</strong><Icon name="chevron" size={15}/></button>)}{!ips.length && <Vazio />}</section><section className="surface methodology"><div className="section-head"><div><span className="eyebrow">SOBRE ESTA ANÁLISE</span><h3>O que está sendo observado</h3></div><Icon name="info" size={19}/></div><p>O VioTrace processa os arquivos de laboratório e apresenta os resultados da última execução. Não há captura contínua de tráfego em tempo real.</p><div className="method-list"><div><Icon name="file" size={17}/><span>Logs de autenticação, firewall e web</span></div><div><Icon name="shield" size={17}/><span>Regras individuais e correlação de eventos</span></div><div><Icon name="bot" size={17}/><span>Assistente local para interpretação dos achados</span></div></div></section></div>
         </>}
-        {dados && pagina === 'alertas' && <section className="surface table-panel"><div className="section-head"><div><span className="eyebrow">ANÁLISE DE EVENTOS</span><h3>Fila de alertas</h3></div><span className="section-note">{filtrados.length} de {alertas.length} alertas</span></div><div className="filterbar"><label className="search-field"><Icon name="search" size={18}/><input type="search" placeholder="Buscar por IP, regra ou descrição" value={buscaAlerta} onChange={e => setBuscaAlerta(e.target.value)}/></label><label className="select-wrap"><span>Severidade</span><select value={severidade} onChange={e => setSeveridade(e.target.value)}><option value="TODAS">Todas</option>{NIVEIS.map(n => <option key={n} value={n}>{NOMES[n]}</option>)}</select></label>{(buscaAlerta || severidade !== 'TODAS') && <button className="clear-filters" onClick={() => { setBuscaAlerta(''); setSeveridade('TODAS'); }}>Limpar</button>}</div><SecurityTable items={janelaAlertas} onInvestigate={abrirIp}/><div className="pagination"><span>Exibindo {filtrados.length ? (paginaAlertas - 1) * 12 + 1 : 0}–{Math.min(paginaAlertas * 12, filtrados.length)} de {filtrados.length}</span><div><button disabled={paginaAlertas <= 1} onClick={() => setPaginaAlertas(n => n - 1)}>Anterior</button><span>{paginaAlertas} / {paginasAlertas}</span><button disabled={paginaAlertas >= paginasAlertas} onClick={() => setPaginaAlertas(n => n + 1)}>Próxima</button></div></div></section>}
+        {dados && pagina === 'alertas' && <section className="surface table-panel"><div className="section-head"><div><span className="eyebrow">ANÁLISE DE EVENTOS</span><h3>Fila de alertas</h3></div><span className="section-note">{filtrados.length} de {alertas.length} alertas</span></div><div className="filterbar"><label className="search-field"><Icon name="search" size={18}/><input type="search" placeholder="Buscar por IP, regra ou descrição" value={buscaAlerta} onChange={e => { setBuscaAlerta(e.target.value); setPaginaAlertas(1); }}/></label><label className="select-wrap"><span>Severidade</span><select value={severidade} onChange={e => { setSeveridade(e.target.value); setPaginaAlertas(1); }}><option value="TODAS">Todas</option>{NIVEIS.map(n => <option key={n} value={n}>{NOMES[n]}</option>)}</select></label>{(buscaAlerta || severidade !== 'TODAS') && <button className="clear-filters" onClick={() => { setBuscaAlerta(''); setSeveridade('TODAS'); setPaginaAlertas(1); }}>Limpar</button>}</div><SecurityTable items={janelaAlertas} onInvestigate={abrirIp}/><div className="pagination"><span>Exibindo {filtrados.length ? (paginaAlertas - 1) * 12 + 1 : 0}–{Math.min(paginaAlertas * 12, filtrados.length)} de {filtrados.length}</span><div><button disabled={paginaAlertas <= 1} onClick={() => setPaginaAlertas(n => n - 1)}>Anterior</button><span>{paginaAlertas} / {paginasAlertas}</span><button disabled={paginaAlertas >= paginasAlertas} onClick={() => setPaginaAlertas(n => n + 1)}>Próxima</button></div></div></section>}
         {dados && pagina === 'inteligencia' && <div className="intel-layout"><section className="surface"><div className="section-head"><div><span className="eyebrow">INVESTIGAÇÃO POR ENDEREÇO</span><h3>Endereços observados</h3></div><span className="section-note">{ipsFiltrados.length} IPs</span></div><label className="search-field intel-search"><Icon name="search" size={18}/><input type="search" value={buscaIp} onChange={e => setBuscaIp(e.target.value)} placeholder="Pesquisar IP, país, organização ou detecção"/></label>{ipsFiltrados.map(item => <button key={item.ip} type="button" className="intel-row" onClick={() => abrirIp(item.ip)}><div className="intel-icon"><Icon name="globe" size={19}/></div><div className="intel-row-main"><strong className="mono">{item.ip}</strong><small>{[item.geo?.cidade, item.geo?.pais].filter(Boolean).join(', ') || 'Localização não informada'}</small><div className="intel-tags">{(item.correlacao?.deteccoes || []).map((d, i) => <span key={i}>{String(d).replaceAll('_', ' ')}</span>)}</div></div><div className="intel-count"><strong>{item.total}</strong><small>alertas</small></div><Icon name="arrow" size={17}/></button>)}{!ipsFiltrados.length && <Vazio />}</section><aside className="surface intel-side"><span className="eyebrow">CONTEXTO DE SEGURANÇA</span><h3>Como interpretar</h3><div className="intel-explain"><Icon name="shield" size={18}/><div><strong>Alertas por regras</strong><p>Atividades isoladas que correspondem a padrões configurados.</p></div></div><div className="intel-explain"><Icon name="radar" size={18}/><div><strong>Correlações</strong><p>Combinações de eventos que apontam para comportamentos como brute force ou port scan.</p></div></div><div className="intel-explain"><Icon name="globe" size={18}/><div><strong>Geolocalização</strong><p>Informação associada ao IP no relatório, sujeita a imprecisões.</p></div></div><p className="footnote">Dados históricos do laboratório. A presença na blacklist refere-se à lista configurada no sistema.</p></aside></div>}
         {pagina === 'acessos' && ehAdmin && <PainelAcessos token={token} usuarioAtual={usuarioAtivo} />}
         {dados && pagina === 'operacoes' && <PainelOperacoes token={token} ehAdmin={ehAdmin} abaInicial={abaOperacoes} aoAtualizarRelatorio={atualizarRelatorio} />}

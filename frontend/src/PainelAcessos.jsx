@@ -46,8 +46,7 @@ export default function PainelAcessos({ token, usuarioAtual }) {
 
   useEffect(() => {
     let ativo = true;
-    setCarregando(true);
-    setErro('');
+    // O estado inicial ja informa carregamento e nenhum erro.
     Promise.all([
       consulta('/api/admin/usuarios', token),
       consulta('/api/admin/convites', token),
