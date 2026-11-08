@@ -8,6 +8,7 @@ from typing import Literal
 import httpx
 from fastapi import FastAPI, HTTPException, Depends
 from seguranca import router, exigir_usuario
+from fatos_ia import resposta_ip, acoes_permitidas
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -93,6 +94,10 @@ def contexto_do_relatorio(ip: str | None) -> dict:
         "ip_em_analise": ip,
         "eventos_do_recorte": len(eventos_ip),
         "alertas_de_regras_do_recorte": len(alertas_ip),
+        "eventos_disponiveis": isinstance(dados.get("eventos"), list),
+        "eventos_por_fonte": dict(Counter(str(e.get("fonte", "?")) for e in eventos_ip)),
+        "falhas_autenticacao": sum(e.get("fonte") == "auth" and e.get("tipo") == "FAIL" for e in eventos_ip),
+        "bloqueios_firewall": sum(e.get("fonte") == "firewall" and e.get("tipo") == "BLOCK" for e in eventos_ip),
         "alertas_por_regra": dict(Counter(str(a.get("regra_nome", "?")) for a in alertas_ip)),
         "alertas_por_severidade": dict(Counter(str(a.get("severidade", "?")) for a in alertas_ip)),
         "deteccoes_correlacionadas": fatos_correlacionados,
@@ -178,6 +183,20 @@ def assistente(corpo: Pergunta):
         "nos dados do SIEM ou em citações do histórico."
     )
 
+    # VIOTRACE_IA_FACTUAL_V3: para perguntas de IP, o modelo escolhe apenas ações.
+    # Dados factuais serão formatados exclusivamente pelo Python.
+    if ip_alvo:
+        permitidas = acoes_permitidas(contexto)
+        sistema = (
+            "Você é o seletor de recomendações defensivas do VioTrace. "
+            "Não produza texto livre, estatísticas, IPs, portas ou descrições de incidentes. "
+            'Devolva SOMENTE JSON com o formato {"acoes":["G01"]}. '
+            "Selecione de 2 a 5 IDs úteis dentre os seguintes, sem inventar outros: "
+            + ", ".join(permitidas) + ". "
+            "B01=MFA e contas privilegiadas; B02=limitação de tentativas; "
+            "P01=firewall; P02=monitoramento de rede; "
+            "L01=revisão da blacklist local; G01=correlação com outras fontes."
+        )
     mensagens = [
         {"role": "system", "content": sistema},
         {"role": "user", "content": (
@@ -228,6 +247,8 @@ def assistente(corpo: Pergunta):
     texto = (retorno.get("message") or {}).get("content")
     if not isinstance(texto, str) or not texto.strip():
         raise HTTPException(status_code=502, detail="O modelo não retornou texto útil.")
+    if ip_alvo:
+        texto = resposta_ip(contexto, texto)
     return {"resposta": texto, "modelo": MODELO, "fonte": "relatorio.json"}
 
 
