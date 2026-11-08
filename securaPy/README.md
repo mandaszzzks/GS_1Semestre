@@ -1,19 +1,16 @@
-# SecuraPy SIEM — Trabalho Final
+﻿# SecuraPy SIEM — Trabalho Final
 
 ## Como usar este projeto
 
-Este projeto contém a **casca** (esqueleto) do sistema SecuraPy SIEM. Todos os
-arquivos `.py` dos módulos já existem com as funções definidas, mas o corpo de
-cada função contém apenas `pass` — ou seja, **nada funciona ainda**.
+O SecuraPy é o núcleo SIEM implementado em Python e integrado à plataforma web VioTrace.
 
-Seu trabalho é **implementar o código** dentro de cada função, seguindo as
-docstrings e dicas que já estão escritas nos arquivos.
+O sistema processa logs de autenticação, firewall e acesso web, aplica regras configuráveis, identifica padrões de brute force, port scan e blacklist, permite consultas e gera relatórios JSON.
 
-### Verificando seu progresso com os testes
+Também possui um servidor TCP que transmite alertas já processados para múltiplos clientes conectados.
 
-O projeto inclui **testes automatizados** que validam se sua implementação está
-correta. Quando você começar, **todos os testes vão falhar**. Conforme você
-implementa as funções, os testes vão passando.
+### Validação com testes automatizados
+
+A implementação do núcleo foi validada com 197 testes automatizados aprovados. Esses testes não representam uma auditoria de segurança completa da plataforma web.
 
 #### Instalando as dependências
 
@@ -67,22 +64,14 @@ python -m pytest testes/test_coletor.py::TestParsearLinhaAuth::test_linha_fail_r
 python -m pytest testes/ --tb=no -q
 ```
 
-Saída esperada no início (tudo falhando):
-```
-182 failed, 15 passed
-```
-(os 15 que passam de cara são testes de entrada inválida/vazia — como as funções
-ainda não fazem nada, retornar `None` coincide com o comportamento esperado para
-entradas inválidas)
-
-Saída esperada quando tudo estiver implementado:
+Resultado esperado da versão implementada:
 ```
 197 passed, 0 failed
 ```
 
-### Ordem recomendada de implementação
+### Módulos implementados
 
-Comece pelo módulo que os outros dependem e vá subindo:
+O núcleo SecuraPy é organizado nos seguintes módulos:
 
 1. **`coletor.py`** — base de tudo (rode `test_coletor.py`)
 2. **`regras.py`** — precisa do coletor (rode `test_regras.py`)
@@ -225,3 +214,4 @@ O problema foi que vários clientes conectando ao mesmo tempo podiam causar conf
 ## Demonstração em vídeo
 
 [https://youtu.be/vMkXqQ5vU6w]
+
