@@ -1,0 +1,12 @@
+
+credenciais.json
+backend_ia/credenciais.json
+backend_ia/dados/
+dados/
+*.antes_login
+.env
+usuarios.json
+convites.json
+backend_ia/usuarios.json
+backend_ia/convites.json
+*.antes_cadastro
