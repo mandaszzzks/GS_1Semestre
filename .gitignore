@@ -1,0 +1,71 @@
+# VioTrace — Windows / Python / React
+
+# Dependências e builds web
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Python: ambientes, cache e testes
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+env/
+*.egg-info/
+htmlcov/
+.coverage
+.coverage.*
+
+# Chaves e variáveis locais (o arquivo .env.example é permitido)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Credenciais, contas, convites e banco de dados local
+backend_ia/credenciais.json
+backend_ia/usuarios.json
+backend_ia/convites.json
+backend_ia/dados/
+backend_ia/*.db
+backend_ia/*.sqlite*
+
+# Relatórios privados e exportações locais
+frontend/public/relatorio.json
+securaPy/saida/
+relatorio_*.json
+viotrace_relatorio_*.json
+
+# Backups e arquivos gerados pelos instaladores
+frontend/.viotrace_ux_backups/
+frontend/.viotrace_ux2_backups/
+.viotrace_docs_backups/
+*.antes_cadastro
+*.antes_contexto_ia
+*.antes_login
+*.antes_integracao
+*.bak
+*.backup
+*~
+*.tmp
+
+# Configurações locais e editores
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# IMPORTANTE: não ignore securaPy/logs/*.log globalmente.
+# Eles são dados sintéticos necessários aos testes e à demonstração.
+# Verifique que não contêm dados reais antes de publicar.
