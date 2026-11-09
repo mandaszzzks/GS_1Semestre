@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+dist/
+*.bak
+*.tmp
+.env*
+**/credenciais.json
+**/usuarios.json
+**/convites.json
+**/dados/
+**/relatorio.json
+**/auditoria_acessos.log
+*.pkl.bak
+*.backup*
